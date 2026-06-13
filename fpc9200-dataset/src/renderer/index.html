@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FPC 9200 指纹数据集工具</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg-primary: #1a1a2e;
+      --bg-secondary: #16213e;
+      --bg-card: #0f3460;
+      --accent: #e94560;
+      --accent-hover: #ff6b6b;
+      --text-primary: #eee;
+      --text-secondary: #aaa;
+      --success: #4ecca3;
+      --warning: #ffc107;
+      --danger: #e94560;
+      --border: #2a2a4a;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    .app {
+      display: flex;
+      height: 100vh;
+    }
+
+    /* 侧边栏 */
+    .sidebar {
+      width: 240px;
+      background: var(--bg-secondary);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      padding: 20px 0;
+    }
+
+    .logo {
+      padding: 0 20px 20px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 20px;
+    }
+
+    .logo h1 {
+      font-size: 18px;
+      color: var(--accent);
+    }
+
+    .logo p {
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-top: 4px;
+    }
+
+    .nav-item {
+      padding: 12px 20px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--text-secondary);
+      transition: all 0.2s;
+      border-left: 3px solid transparent;
+    }
+
+    .nav-item:hover {
+      background: var(--bg-card);
+      color: var(--text-primary);
+    }
+
+    .nav-item.active {
+      background: var(--bg-card);
+      color: var(--accent);
+      border-left-color: var(--accent);
+    }
+
+    .nav-item .icon {
+      width: 20px;
+      text-align: center;
+      font-size: 16px;
+    }
+
+    /* 主内容区 */
+    .main {
+      flex: 1;
+      overflow-y: auto;
+      padding: 30px;
+    }
+
+    .page {
+      display: none;
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    .page.active {
+      display: block;
+    }
+
+    .page-title {
+      font-size: 24px;
+      margin-bottom: 8px;
+    }
+
+    .page-desc {
+      color: var(--text-secondary);
+      margin-bottom: 30px;
+      line-height: 1.6;
+    }
+
+    /* 卡片 */
+    .card {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 20px;
+    }
+
+    .card-title {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* 按钮 */
+    .btn {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      transition: all 0.2s;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: var(--accent-hover);
+    }
+
+    .btn-secondary {
+      background: var(--bg-card);
+      color: var(--text-primary);
+      border: 1px solid var(--border);
+    }
+
+    .btn-secondary:hover {
+      background: var(--border);
+    }
+
+    .btn-success {
+      background: var(--success);
+      color: var(--bg-primary);
+    }
+
+    .btn-danger {
+      background: var(--danger);
+      color: white;
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .btn-group {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    /* 状态指示器 */
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 13px;
+    }
+
+    .status-success {
+      background: rgba(78, 204, 163, 0.15);
+      color: var(--success);
+    }
+
+    .status-warning {
+      background: rgba(255, 193, 7, 0.15);
+      color: var(--warning);
+    }
+
+    .status-error {
+      background: rgba(233, 69, 96, 0.15);
+      color: var(--danger);
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    /* 样本列表 */
+    .sample-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 12px;
+    }
+
+    .sample-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .sample-card:hover {
+      border-color: var(--accent);
+    }
+
+    .sample-card .id {
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    .sample-card .meta {
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    .sample-card .quality-bar {
+      height: 4px;
+      background: var(--border);
+      border-radius: 2px;
+      margin-top: 8px;
+      overflow: hidden;
+    }
+
+    .sample-card .quality-fill {
+      height: 100%;
+      background: var(--success);
+      border-radius: 2px;
+    }
+
+    /* 分数报告 */
+    .score-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 16px;
+    }
+
+    .score-table th,
+    .score-table td {
+      padding: 10px 12px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .score-table th {
+      background: var(--bg-card);
+      font-weight: 600;
+      color: var(--text-secondary);
+      font-size: 12px;
+      text-transform: uppercase;
+    }
+
+    .score-table tr:hover {
+      background: var(--bg-card);
+    }
+
+    .score-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .score-match {
+      background: rgba(78, 204, 163, 0.2);
+      color: var(--success);
+    }
+
+    .score-nomatch {
+      background: rgba(233, 69, 96, 0.2);
+      color: var(--danger);
+    }
+
+    /* 统计卡片 */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .stat-card {
+      background: var(--bg-card);
+      border-radius: 8px;
+      padding: 16px;
+      text-align: center;
+    }
+
+    .stat-card .value {
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--accent);
+    }
+
+    .stat-card .label {
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-top: 4px;
+    }
+
+    /* ROC 曲线 */
+    .roc-chart {
+      background: var(--bg-card);
+      border-radius: 8px;
+      padding: 20px;
+      margin-top: 20px;
+    }
+
+    .roc-svg {
+      width: 100%;
+      height: 300px;
+    }
+
+    /* 日志输出 */
+    .log-output {
+      background: #0d1117;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 12px;
+      line-height: 1.6;
+      max-height: 400px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      color: #c9d1d9;
+    }
+
+    .log-output .log-info { color: #58a6ff; }
+    .log-output .log-success { color: #3fb950; }
+    .log-output .log-error { color: #f85149; }
+    .log-output .log-warn { color: #d29922; }
+
+    /* 进度条 */
+    .progress-bar {
+      height: 6px;
+      background: var(--border);
+      border-radius: 3px;
+      overflow: hidden;
+      margin: 12px 0;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: var(--accent);
+      border-radius: 3px;
+      transition: width 0.3s;
+    }
+
+    /* 空状态 */
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--text-secondary);
+    }
+
+    .empty-state .icon {
+      font-size: 48px;
+      margin-bottom: 16px;
+    }
+
+    /* 响应式 */
+    @media (max-width: 768px) {
+      .sidebar { width: 60px; }
+      .sidebar .logo h1,
+      .sidebar .logo p,
+      .nav-item span:not(.icon) { display: none; }
+      .main { padding: 16px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <!-- 侧边栏 -->
+    <div class="sidebar">
+      <div class="logo">
+        <h1>FPC 9200</h1>
+        <p>指纹数据集工具</p>
+      </div>
+      <nav>
+        <div class="nav-item active" data-page="dashboard">
+          <span class="icon">📊</span><span>仪表盘</span>
+        </div>
+        <div class="nav-item" data-page="enroll">
+          <span class="icon">👆</span><span>录入模板</span>
+        </div>
+        <div class="nav-item" data-page="capture">
+          <span class="icon">🎙️</span><span>录制样本</span>
+        </div>
+        <div class="nav-item" data-page="match">
+          <span class="icon">🔍</span><span>匹配计算</span>
+        </div>
+        <div class="nav-item" data-page="samples">
+          <span class="icon">📁</span><span>样本管理</span>
+        </div>
+        <div class="nav-item" data-page="reports">
+          <span class="icon">📈</span><span>报告分析</span>
+        </div>
+      </nav>
+    </div>
+
+    <!-- 主内容 -->
+    <div class="main">
+      <!-- 仪表盘 -->
+      <div class="page active" id="page-dashboard">
+        <h2 class="page-title">仪表盘</h2>
+        <p class="page-desc">FPC 9200 指纹数据集收集与匹配分析工具</p>
+
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="value" id="stat-genuine-count">0</div>
+            <div class="label">正确样本</div>
+          </div>
+          <div class="stat-card">
+            <div class="value" id="stat-impostor-count">0</div>
+            <div class="label">错误样本</div>
+          </div>
+          <div class="stat-card">
+            <div class="value" id="stat-report-count">0</div>
+            <div class="label">匹配报告</div>
+          </div>
+          <div class="stat-card">
+            <div class="value" id="stat-template">—</div>
+            <div class="label">模板状态</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">🚀 快速开始</div>
+          <ol style="padding-left: 20px; line-height: 2; color: var(--text-secondary);">
+            <li>点击「录入模板」录入指纹模板（7 次按压）</li>
+            <li>点击「录制样本」→「正确手指」开始录制正确样本</li>
+            <li>点击「录制样本」→「错误手指」开始录制错误样本</li>
+            <li>点击「匹配计算」执行匹配并查看分数报告</li>
+            <li>根据报告分析优化算法参数</li>
+          </ol>
+        </div>
+      </div>
+
+      <!-- 录入模板 -->
+      <div class="page" id="page-enroll">
+        <h2 class="page-title">录入模板指纹</h2>
+        <p class="page-desc">录入 7 张指纹图像作为匹配模板</p>
+
+        <div class="card">
+          <div class="card-title">模板录入</div>
+          <p style="color: var(--text-secondary); margin-bottom: 16px;">
+            系统将引导您放置手指 7 次，每次按压不同位置（中心、偏上、偏下、偏左、偏右等）。
+          </p>
+          <div class="btn-group">
+            <button class="btn btn-primary" id="btn-enroll" onclick="startEnroll()">
+              👆 开始录入
+            </button>
+          </div>
+          <div id="enroll-status" style="margin-top: 16px;"></div>
+          <div id="enroll-log" class="log-output" style="margin-top: 16px; display: none;"></div>
+        </div>
+      </div>
+
+      <!-- 录制样本 -->
+      <div class="page" id="page-capture">
+        <h2 class="page-title">录制指纹样本</h2>
+        <p class="page-desc">采集正确手指和错误手指的指纹样本集</p>
+
+        <div class="card">
+          <div class="card-title">✅ 正确手指样本</div>
+          <p style="color: var(--text-secondary); margin-bottom: 16px;">
+            使用与模板相同的手指，每次按压不同位置。建议采集 20+ 个样本。
+          </p>
+          <div class="btn-group">
+            <button class="btn btn-success" onclick="startCapture('genuine')">
+              🎙️ 开始录制
+            </button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">❌ 错误手指样本</div>
+          <p style="color: var(--text-secondary); margin-bottom: 16px;">
+            使用与模板不同的手指（或其他人的手指）。建议采集 20+ 个样本。
+          </p>
+          <div class="btn-group">
+            <button class="btn btn-danger" onclick="startCapture('impostor')">
+              🎙️ 开始录制
+            </button>
+          </div>
+        </div>
+
+        <div id="capture-status"></div>
+        <div id="capture-log" class="log-output" style="margin-top: 16px; display: none;"></div>
+      </div>
+
+      <!-- 匹配计算 -->
+      <div class="page" id="page-match">
+        <h2 class="page-title">匹配计算</h2>
+        <p class="page-desc">对所有样本执行匹配计算，输出分数报告</p>
+
+        <div class="card">
+          <div class="card-title">🔍 执行匹配</div>
+          <p style="color: var(--text-secondary); margin-bottom: 16px;">
+            将所有正确样本和错误样本与模板进行匹配计算，输出详细分数报告。
+            匹配完成后可在「报告分析」页面查看结果。
+          </p>
+          <div class="btn-group">
+            <button class="btn btn-primary" onclick="startMatching()">
+              🔍 开始匹配
+            </button>
+          </div>
+        </div>
+
+        <div id="match-status"></div>
+        <div id="match-log" class="log-output" style="margin-top: 16px; display: none;"></div>
+      </div>
+
+      <!-- 样本管理 -->
+      <div class="page" id="page-samples">
+        <h2 class="page-title">样本管理</h2>
+        <p class="page-desc">查看和管理已采集的指纹样本</p>
+
+        <div class="card">
+          <div class="card-title">✅ 正确样本 (<span id="genuine-count">0</span>)</div>
+          <div class="sample-list" id="genuine-list">
+            <div class="empty-state"><div class="icon">📭</div><p>暂无样本</p></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">❌ 错误样本 (<span id="impostor-count">0</span>)</div>
+          <div class="sample-list" id="impostor-list">
+            <div class="empty-state"><div class="icon">📭</div><p>暂无样本</p></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 报告分析 -->
+      <div class="page" id="page-reports">
+        <h2 class="page-title">报告分析</h2>
+        <p class="page-desc">查看匹配计算报告和 ROC 曲线分析</p>
+
+        <div id="reports-container">
+          <div class="empty-state">
+            <div class="icon">📈</div>
+            <p>暂无匹配报告，请先执行「匹配计算」</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="src/renderer/renderer.js"></script>
+</body>
+</html>

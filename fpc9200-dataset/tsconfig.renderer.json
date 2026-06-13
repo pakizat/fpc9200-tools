@@ -3,11 +3,11 @@
     "target": "ES2020",
     "module": "commonjs",
     "lib": ["ES2020", "DOM"],
-    "outDir": "../../../dist/renderer",
-    "rootDir": "./renderer",
+    "outDir": "dist/renderer",
+    "rootDir": "src/renderer",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true
   },
-  "include": ["renderer/**/*"]
+  "include": ["src/renderer/**/*"]
 }

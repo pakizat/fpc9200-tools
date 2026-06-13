@@ -3,12 +3,12 @@
     "target": "ES2020",
     "module": "commonjs",
     "lib": ["ES2020"],
-    "outDir": "../../../dist/main",
-    "rootDir": "../",
+    "outDir": "dist/main",
+    "rootDir": "src/main",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "resolveJsonModule": true
   },
-  "include": ["../main/**/*"]
+  "include": ["src/main/**/*"]
 }

@@ -4,13 +4,9 @@
   "description": "FPC 9200 fingerprint dataset collection and matching analysis tool",
   "main": "dist/main/main.js",
   "scripts": {
-    "build": "tsc -p tsconfig.main.json && tsc -p tsconfig.renderer.json",
+    "build": "tsc -p tsconfig.main.json && tsc -p tsconfig.renderer.json && cp src/renderer/index.html dist/renderer/",
     "start": "npm run build && electron .",
-    "cli": "python3 fpc9200-dataset.py",
-    "dev": "tsc -p tsconfig.main.json && tsc -p tsconfig.renderer.json && electron ."
-  },
-  "dependencies": {
-    "electron-store": "^8.1.0"
+    "cli": "python3 fpc9200-dataset.py"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",

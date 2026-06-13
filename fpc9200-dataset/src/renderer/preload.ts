@@ -2,7 +2,7 @@
  * Preload Script - 安全桥接 Main 和 Renderer
  */
 
-import { contextBridge, ipcRenderer } from 'electron';
+const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
   enrollTemplate: () => ipcRenderer.invoke('enroll-template'),

@@ -2,19 +2,35 @@
  * FPC 9200 Dataset Tool - Renderer Process
  */
 
+export {};
+
+declare global {
+  interface Window {
+    electronAPI: {
+      enrollTemplate: () => Promise<{ success: boolean; output?: string; error?: string }>;
+      captureSamples: (type: string) => Promise<{ success: boolean; output?: string; error?: string }>;
+      runMatching: () => Promise<{ success: boolean; output?: string; error?: string }>;
+      listSamples: () => Promise<{ genuine: any[]; impostor: any[] }>;
+      listReports: () => Promise<any[]>;
+      getReport: (id: string) => Promise<any>;
+      deleteSample: (type: string, id: string) => Promise<{ success: boolean }>;
+    };
+  }
+}
+
 // ============ 状态 ============
-interface AppState {
+const state: {
   currentReport: any | null;
   genuineSamples: any[];
   impostorSamples: any[];
   reports: any[];
-}
-
-const state: AppState = {
+  templateExists: boolean;
+} = {
   currentReport: null,
   genuineSamples: [],
   impostorSamples: [],
   reports: [],
+  templateExists: false,
 };
 
 // ============ 导航 ============
@@ -44,8 +60,7 @@ function updateDashboard() {
   document.getElementById('impostor-count')!.textContent = String(state.impostorSamples.length);
   document.getElementById('report-count')!.textContent = String(state.reports.length);
 
-  const templateExists = window.electronAPI?.checkTemplate?.()
-    ?? false;
+  const templateExists = state.templateExists ?? false;
   const el = document.getElementById('stat-template')!;
   el.textContent = templateExists ? '✓' : '—';
   el.style.color = templateExists ? 'var(--success)' : 'var(--text-secondary)';

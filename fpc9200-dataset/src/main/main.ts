@@ -2,18 +2,20 @@
  * FPC 9200 Dataset Tool - Electron Main Process
  */
 
-import { app, BrowserWindow, ipcMain, dialog } from 'electron';
-import { exec } from 'child_process';
-import { promisify } from 'util';
-import * as path from 'path';
-import * as fs from 'fs';
+const { app, BrowserWindow, ipcMain } = require('electron');
+const path = require('path');
+const fs = require('fs');
+const { exec } = require('child_process');
+const { promisify } = require('util');
 
 const execAsync = promisify(exec);
 
-const DATA_DIR = path.join(__dirname, '..', '..', 'data', 'fpc9200-dataset');
-const SCRIPT = path.join(__dirname, 'fpc9200-dataset.py');
+// 项目根目录（从 dist/main/ 向上 2 级）
+const PROJECT_DIR = path.join(__dirname, '..', '..');
+const DATA_DIR = path.join(PROJECT_DIR, 'data', 'fpc9200-dataset');
+const SCRIPT = path.join(PROJECT_DIR, 'fpc9200-dataset.py');
 
-let mainWindow: BrowserWindow | null = null;
+let mainWindow: any = null;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -56,7 +58,7 @@ ipcMain.handle('enroll-template', async () => {
 });
 
 // 录制样本
-ipcMain.handle('capture-samples', async (event, sampleType: string) => {
+ipcMain.handle('capture-samples', async (_event: any, sampleType: string) => {
   try {
     // 使用 PTY 进行交互式会话
     const { stdout, stderr } = await execAsync(
@@ -132,7 +134,7 @@ ipcMain.handle('list-reports', async () => {
 });
 
 // 获取报告详情
-ipcMain.handle('get-report', async (event, reportId: string) => {
+ipcMain.handle('get-report', async (_event: any, reportId: string) => {
   try {
     const reportFile = path.join(DATA_DIR, 'reports', `report_${reportId}.json`);
     if (!fs.existsSync(reportFile)) return null;
@@ -143,7 +145,7 @@ ipcMain.handle('get-report', async (event, reportId: string) => {
 });
 
 // 删除样本
-ipcMain.handle('delete-sample', async (event, sampleType: string, sampleId: string) => {
+ipcMain.handle('delete-sample', async (_event: any, sampleType: string, sampleId: string) => {
   try {
     const dir = path.join(DATA_DIR, sampleType);
     fs.unlinkSync(path.join(dir, `${sampleId}.bin`));

@@ -1,25 +1,28 @@
-# 依赖
+# === Node.js ===
 node_modules/
 package-lock.json
+npm-debug.log*
 
-# 编译产物
+# === 编译产物 ===
 *.o
-*.exe
-*.dll
+*.a
 *.so
+*.dylib
 fpc9200-capture/fpc9200-capture
 
-# 数据文件（隐私）
-data/
+# === 二进制/数据文件（指纹数据） ===
 *.bin
-reports/
+*.dat
+data/
 
-# IDE
+# === IDE / 编辑器 ===
 .vscode/
 .idea/
 *.swp
 *~
+*.sublime-project
+*.sublime-workspace
 
-# OS
+# === OS ===
 .DS_Store
 Thumbs.db

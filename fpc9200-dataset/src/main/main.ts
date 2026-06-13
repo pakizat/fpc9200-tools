@@ -5,15 +5,17 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const { exec } = require('child_process');
+const { execFile, spawn } = require('child_process');
 const { promisify } = require('util');
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 // 项目根目录（从 dist/main/ 向上 2 级）
 const PROJECT_DIR = path.join(__dirname, '..', '..');
-const DATA_DIR = path.join(PROJECT_DIR, 'data', 'fpc9200-dataset');
+const REPO_DIR = path.join(PROJECT_DIR, '..', '..');
+const DATA_DIR = process.env.FPC9200_DATA_DIR || path.join(REPO_DIR, 'data', 'fpc9200-dataset');
 const SCRIPT = path.join(PROJECT_DIR, 'fpc9200-dataset.py');
+const SCRIPT_ENV = { ...process.env, FPC9200_DATA_DIR: DATA_DIR };
 
 let mainWindow: any = null;
 
@@ -44,9 +46,18 @@ app.on('activate', () => {
 
 // ============ IPC Handlers ============
 
+async function runScript(args: string[], timeout: number) {
+  return execFileAsync('python3', [SCRIPT, ...args], {
+    cwd: PROJECT_DIR,
+    env: SCRIPT_ENV,
+    timeout,
+    maxBuffer: 1024 * 1024 * 20,
+  });
+}
+
 ipcMain.handle('enroll-template', async () => {
   try {
-    const { stdout, stderr } = await execAsync(`python3 ${SCRIPT} --enroll-template`, { timeout: 300000 });
+    const { stdout, stderr } = await runScript(['--enroll-template'], 300000);
     return { success: true, output: stdout + stderr };
   } catch (e: any) {
     return { success: false, error: e.message };
@@ -55,7 +66,10 @@ ipcMain.handle('enroll-template', async () => {
 
 ipcMain.handle('capture-samples', async (_event: any, sampleType: string) => {
   try {
-    const { stdout, stderr } = await execAsync(`python3 ${SCRIPT} --capture ${sampleType}`, { timeout: 600000 });
+    if (!['genuine', 'impostor'].includes(sampleType)) {
+      return { success: false, error: 'invalid sample type' };
+    }
+    const { stdout, stderr } = await runScript(['--capture-once', sampleType], 600000);
     return { success: true, output: stdout + stderr };
   } catch (e: any) {
     return { success: false, error: e.message };
@@ -63,12 +77,49 @@ ipcMain.handle('capture-samples', async (_event: any, sampleType: string) => {
 });
 
 ipcMain.handle('run-matching', async () => {
-  try {
-    const { stdout, stderr } = await execAsync(`python3 ${SCRIPT} --match`, { timeout: 600000 });
-    return { success: true, output: stdout + stderr };
-  } catch (e: any) {
-    return { success: false, error: e.message };
-  }
+  return new Promise((resolve) => {
+    const child = spawn('python3', ['-u', SCRIPT, '--match'], {
+      cwd: PROJECT_DIR,
+      env: { ...SCRIPT_ENV, PYTHONUNBUFFERED: '1' },
+    });
+    let output = '';
+
+    const append = (data: Buffer) => {
+      const text = data.toString();
+      output += text;
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('matching-output', text);
+      }
+    };
+
+    child.stdout.on('data', append);
+    child.stderr.on('data', append);
+    child.on('error', (e: Error) => {
+      resolve({ success: false, output, error: e.message });
+    });
+    child.on('close', (code: number) => {
+      resolve({
+        success: code === 0,
+        output,
+        error: code === 0 ? undefined : `matching exited with code ${code}`,
+      });
+    });
+  });
+});
+
+ipcMain.handle('get-status', async () => {
+  const countJson = (dir: string) => {
+    if (!fs.existsSync(dir)) return 0;
+    return fs.readdirSync(dir).filter((f: string) => f.endsWith('.json')).length;
+  };
+
+  return {
+    dataDir: DATA_DIR,
+    templateExists: fs.existsSync(path.join(DATA_DIR, 'template.f9rm')),
+    genuineCount: countJson(path.join(DATA_DIR, 'genuine')),
+    impostorCount: countJson(path.join(DATA_DIR, 'impostor')),
+    reportCount: countJson(path.join(DATA_DIR, 'reports')),
+  };
 });
 
 ipcMain.handle('list-samples', async () => {

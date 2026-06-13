@@ -24,6 +24,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <time.h>
+#include <errno.h>
 
 #include <libusb-1.0/libusb.h>
 #include <openssl/ssl.h>
@@ -110,6 +111,73 @@ static int bulk_read(unsigned char *buf, int len, int timeout) {
     return actual;
 }
 
+static uint32_t event_cmd(const unsigned char *buf) {
+    uint32_t raw;
+    memcpy(&raw, buf, sizeof(raw));
+    return raw <= 0xff ? raw : raw >> 24;
+}
+
+static uint32_t event_len(const unsigned char *buf) {
+    return ((uint32_t)buf[4] << 24) |
+           ((uint32_t)buf[5] << 16) |
+           ((uint32_t)buf[6] << 8) |
+           (uint32_t)buf[7];
+}
+
+static int read_event(const char *label, uint8_t expected_cmd,
+                      unsigned char *payload, int payload_max, int timeout) {
+    unsigned char buf[4096];
+    int got = bulk_read(buf, sizeof(buf), timeout);
+    if (got < 0) {
+        fprintf(stderr, "%s event read failed: %d\n", label, got);
+        return got;
+    }
+    if (got < 12) {
+        fprintf(stderr, "%s event too short: %d\n", label, got);
+        return -1;
+    }
+
+    uint32_t cmd = event_cmd(buf);
+    uint32_t len = event_len(buf);
+    if (expected_cmd && cmd != expected_cmd) {
+        fprintf(stderr, "%s unexpected event cmd=0x%02x len=%u actual=%d\n",
+                label, cmd, len, got);
+        return -1;
+    }
+    if (len < 12) {
+        fprintf(stderr, "%s invalid event length: %u\n", label, len);
+        return -1;
+    }
+
+    int payload_len = (int)len - 12;
+    int copied = got - 12;
+    if (payload && payload_len > payload_max) {
+        fprintf(stderr, "%s payload too large: %d > %d\n",
+                label, payload_len, payload_max);
+        return -1;
+    }
+    if (copied > payload_len) copied = payload_len;
+    if (payload && copied > 0) memcpy(payload, buf + 12, copied);
+
+    while (copied < payload_len) {
+        got = bulk_read(buf, sizeof(buf), timeout);
+        if (got <= 0) {
+            fprintf(stderr, "%s continuation read failed: %d\n", label, got);
+            return -1;
+        }
+        if (copied + got > payload_len) {
+            fprintf(stderr, "%s continuation too long: copied=%d got=%d payload=%d\n",
+                    label, copied, got, payload_len);
+            return -1;
+        }
+        if (payload) memcpy(payload + copied, buf, got);
+        copied += got;
+    }
+
+    printf("  %s event cmd=0x%02x payload=%d\n", label, cmd, payload_len);
+    return payload_len;
+}
+
 /* ===== TLS 处理 ===== */
 
 static unsigned int psk_callback(SSL *ssl, const char *identity,
@@ -189,9 +257,9 @@ static int tls_init(void) {
             return -1;
         }
 
-        /* 读取设备 TLS 事件 */
+        /* 读取设备 TLS 事件，去掉 12 字节事件头后喂给 OpenSSL */
         unsigned char evt[4096];
-        int got = bulk_read(evt, sizeof(evt), 100);
+        int got = read_event("TLS", CMD_TLS_INIT, evt, sizeof(evt), 2000);
         if (got > 0) {
             BIO_write(rbio, evt, got);
         }
@@ -205,9 +273,6 @@ static int tls_init(void) {
 static int tls_decrypt_record(const unsigned char *record, int record_len,
                                unsigned char *out, int out_max) {
     if (!ssl || record_len <= 5) return 0;
-
-    /* 检查 TLS record 类型 */
-    if (record[0] != 0x17) return 0; /* Application Data */
 
     /* 写入 BIO 并解密 */
     BIO_write(rbio, record, record_len);
@@ -232,6 +297,7 @@ static int wait_and_capture(void) {
     unsigned char buf[4096];
     unsigned char decrypted[8192 + IMAGE_SIZE];
     int total_decrypted = 0;
+    int get_img_sent = 0;
 
     printf("Waiting for finger placement...\n");
 
@@ -248,66 +314,89 @@ static int wait_and_capture(void) {
 
         if (got < 12) continue;
 
-        /* 解析事件头 */
-        uint32_t cmdid = (buf[0] << 24) | (buf[1] << 16) | (buf[2] << 8) | buf[3];
-        uint32_t length = (buf[4] << 24) | (buf[5] << 16) | (buf[6] << 8) | buf[7];
+        if (get_img_sent) {
+            const unsigned char *payload = buf;
+            int payload_len = got;
+            uint32_t len = event_len(buf);
 
-        if (cmdid == 0x01000000) {
+            if (len >= 12 && len <= (uint32_t)(got + 65536)) {
+                payload = buf + 12;
+                payload_len = got - 12;
+            }
+
+            int dec_len = tls_decrypt_record(payload, payload_len,
+                                              decrypted + total_decrypted,
+                                              sizeof(decrypted) - total_decrypted);
+            if (dec_len > 0) {
+                total_decrypted += dec_len;
+                printf("  Decrypted image payload chunk=%d total=%d\n",
+                       dec_len, total_decrypted);
+                if (total_decrypted >= 24 + IMAGE_SIZE) {
+                    memcpy(image_buf, decrypted + 24, IMAGE_SIZE);
+                    image_received = 1;
+                    printf("  Image captured: %d bytes (plain=%d)\n",
+                           IMAGE_SIZE, total_decrypted);
+                    return 0;
+                }
+            }
+            continue;
+        }
+
+        /* 解析事件头 */
+        uint32_t cmdid = event_cmd(buf);
+        uint32_t length = event_len(buf);
+
+        if (cmdid == 0x01) {
             /* ARM_RESULT */
             printf("  ARM result received\n");
-        } else if (cmdid == 0x06000000) {
+        } else if (cmdid == 0x06) {
             /* FINGER_DOWN */
             printf("  Finger detected!\n");
             finger_detected = 1;
-        } else if (cmdid == 0x05000000) {
+            if (!get_img_sent) {
+                int r = ctrl_out(CMD_GET_IMG, 0, 0, NULL, 0);
+                if (r < 0) {
+                    fprintf(stderr, "GET_IMG failed: %d\n", r);
+                    return -1;
+                }
+                get_img_sent = 1;
+                printf("  GET_IMG sent\n");
+            }
+        } else if (cmdid == 0x05) {
             /* FINGER_UP */
             printf("  Finger lifted\n");
-        } else if (cmdid == 0x08000000) {
+        } else if (cmdid == 0x08) {
             /* IMG event - 包含加密图像数据 */
             printf("  IMG event (length=%u)\n", length);
 
-            /* 复制事件数据（包含 TLS 记录） */
-            int payload_len = got;
-            if (payload_len > 0) {
+            if (got > 12) {
                 /* 尝试解密 */
-                int dec_len = tls_decrypt_record(buf, payload_len,
+                int dec_len = tls_decrypt_record(buf + 12, got - 12,
                                                   decrypted + total_decrypted,
                                                   sizeof(decrypted) - total_decrypted);
                 if (dec_len > 0) {
                     total_decrypted += dec_len;
 
-                    /* 在解密数据中查找图像 */
-                    /* 图像数据通常在解密载荷的固定偏移处 */
-                    for (int i = 0; i < total_decrypted - IMAGE_SIZE; i++) {
-                        /* 检查是否是有效的图像数据（灰度值范围） */
-                        int valid = 1;
-                        for (int j = 0; j < 100 && valid; j++) {
-                            if (decrypted[i + j] > 250) valid = 0;
-                        }
-                        if (valid) {
-                            memcpy(image_buf, decrypted + i, IMAGE_SIZE);
-                            image_received = 1;
-                            printf("  Image extracted: %d bytes\n", IMAGE_SIZE);
-                            return 0;
-                        }
+                    if (total_decrypted >= 24 + IMAGE_SIZE) {
+                        memcpy(image_buf, decrypted + 24, IMAGE_SIZE);
+                        image_received = 1;
+                        printf("  Image extracted: %d bytes (plain=%d)\n",
+                               IMAGE_SIZE, total_decrypted);
+                        return 0;
                     }
                 }
             }
-        } else if (cmdid == 0x00000005) {
-            /* TLS 事件 */
-            /* 写入 BIO 用于解密 */
-            BIO_write(rbio, buf + 12, got - 12);
-
-            /* 尝试读取解密数据 */
-            unsigned char dec_buf[8192 + IMAGE_SIZE];
-            int n = SSL_read(ssl, dec_buf, sizeof(dec_buf));
-            if (n > 0) {
-                /* 检查是否包含图像数据 */
-                if (n >= IMAGE_SIZE + 12) {
-                    /* 图像数据在偏移 12 处 */
-                    memcpy(image_buf, dec_buf + 12, IMAGE_SIZE);
+        } else if (cmdid == CMD_TLS_INIT) {
+            int dec_len = tls_decrypt_record(buf + 12, got - 12,
+                                              decrypted + total_decrypted,
+                                              sizeof(decrypted) - total_decrypted);
+            if (dec_len > 0) {
+                total_decrypted += dec_len;
+                if (total_decrypted >= 24 + IMAGE_SIZE) {
+                    memcpy(image_buf, decrypted + 24, IMAGE_SIZE);
                     image_received = 1;
-                    printf("  Image captured via TLS: %d bytes\n", IMAGE_SIZE);
+                    printf("  Image captured via TLS: %d bytes (plain=%d)\n",
+                           IMAGE_SIZE, total_decrypted);
                     return 0;
                 }
             }
@@ -358,7 +447,10 @@ static int capture_image(const char *output_file) {
     printf("Step 2: INIT\n");
     uint32_t session_id = 0x0f4b1e32;
     ctrl_out(CMD_INIT, 1, 0, (unsigned char *)&session_id, sizeof(session_id));
-    usleep(500000);
+    if (read_event("INIT", 0x02, NULL, 0, DATA_TIMEOUT) < 0) {
+        fprintf(stderr, "INIT event failed\n");
+        goto cleanup;
+    }
 
     /* 3. TLS 初始化 */
     printf("Step 3: TLS init\n");
@@ -392,7 +484,8 @@ static int capture_image(const char *output_file) {
             fclose(f);
             printf("\nImage saved to: %s (%d bytes)\n", output_file, IMAGE_SIZE);
         } else {
-            fprintf(stderr, "Failed to save image\n");
+            fprintf(stderr, "Failed to save image %s: %s\n",
+                    output_file, strerror(errno));
         }
     } else {
         fprintf(stderr, "No image received\n");

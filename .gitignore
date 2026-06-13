@@ -1,28 +1,46 @@
-# === Node.js ===
-node_modules/
-package-lock.json
-npm-debug.log*
+# Fingerprint privacy data - never commit real samples or templates
+data/
+captures/
+reports/
+**/data/
+**/captures/
+**/reports/
+*.bin
+*.raw
+*.f9rm
+*.fp3
+template.*
+genuine_*
+impostor_*
+report_*.json
 
-# === 编译产物 ===
+# Build outputs
 *.o
 *.a
 *.so
 *.dylib
+*.dll
+*.exe
+*.zip
 fpc9200-capture/fpc9200-capture
+linux-tls-probe/fpc9200_tls_probe
+fpc9200-dataset/dist/
 
-# === 二进制/数据文件（指纹数据） ===
-*.bin
-*.dat
-data/
+# Local runtime/cache
+node_modules/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+fpc9200-dataset/.cache/
 
-# === IDE / 编辑器 ===
+# Windows/Wine probe local state
+enclave-probe/wineprefix/
+enclave-probe/vm-probe-output*.txt
+
+# Editor/OS
 .vscode/
 .idea/
 *.swp
 *~
-*.sublime-project
-*.sublime-workspace
-
-# === OS ===
 .DS_Store
 Thumbs.db

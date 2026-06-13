@@ -243,7 +243,29 @@
 
     .sample-card .id {
       font-weight: 600;
+    }
+
+    .sample-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
       margin-bottom: 4px;
+    }
+
+    .sample-delete {
+      border: 1px solid var(--danger);
+      background: transparent;
+      color: var(--danger);
+      border-radius: 6px;
+      padding: 3px 8px;
+      font-size: 12px;
+      cursor: pointer;
+      flex: 0 0 auto;
+    }
+
+    .sample-delete:hover {
+      background: rgba(233, 69, 96, 0.15);
     }
 
     .sample-card .meta {
@@ -503,11 +525,11 @@
         <div class="card">
           <div class="card-title">✅ 正确手指样本</div>
           <p style="color: var(--text-secondary); margin-bottom: 16px;">
-            使用与模板相同的手指，每次按压不同位置。建议采集 20+ 个样本。
+            使用与模板相同的手指，每次点击采集一张。建议采集 20+ 个样本。
           </p>
           <div class="btn-group">
             <button class="btn btn-success" onclick="startCapture('genuine')">
-              🎙️ 开始录制
+              🎙️ 采集一张
             </button>
           </div>
         </div>
@@ -515,11 +537,11 @@
         <div class="card">
           <div class="card-title">❌ 错误手指样本</div>
           <p style="color: var(--text-secondary); margin-bottom: 16px;">
-            使用与模板不同的手指（或其他人的手指）。建议采集 20+ 个样本。
+            使用与模板不同的手指（或其他人的手指），每次点击采集一张。建议采集 20+ 个样本。
           </p>
           <div class="btn-group">
             <button class="btn btn-danger" onclick="startCapture('impostor')">
-              🎙️ 开始录制
+              🎙️ 采集一张
             </button>
           </div>
         </div>
@@ -585,6 +607,6 @@
     </div>
   </div>
 
-  <script src="src/renderer/renderer.js"></script>
+  <script src="renderer.js"></script>
 </body>
 </html>

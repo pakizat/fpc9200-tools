@@ -1,0 +1,25 @@
+# 依赖
+node_modules/
+package-lock.json
+
+# 编译产物
+*.o
+*.exe
+*.dll
+*.so
+fpc9200-capture/fpc9200-capture
+
+# 数据文件（隐私）
+data/
+*.bin
+reports/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*~
+
+# OS
+.DS_Store
+Thumbs.db
